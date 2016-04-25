@@ -1,0 +1,121 @@
+
+---
+title: "Machine Learning Assignment"
+author: "Michael Tarantino"
+date: "24 April 2016"
+output: html_document
+---
+
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+# Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+# What you should submit
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+
+# Data preparation
+
+First, we need to load the libraries we will use during the assignment and the training/test data sets :
+
+```{r warning=FALSE}
+library(caret)
+set.seed(3523)
+ass_home = "~/Dev/DataScience/MachineLearning/MachineLearningAssignment/"
+testing = "pml-testing.csv"
+training = "pml-training.csv"
+
+trainingDf <- read.table(paste(ass_home, training, sep=""), sep=",", header=TRUE, na.strings = c("NA","#DIV/0!",""))
+testingDf <- read.table(paste(ass_home, testing, sep=""), sep=",", header=TRUE, na.strings = c("NA","#DIV/0!",""))
+```
+
+# Data Cleaning and PreProcessing
+
+This section is dedicated to the data cleaning. The first task is to cast some variables as factor variables.
+
+```{r}
+trainingDf$new_window <- as.factor(trainingDf$new_window)
+trainingDf$classe <- as.factor(trainingDf$classe)
+
+testingDf$new_window <- as.factor(testingDf$new_window)
+```
+
+Then, based on what we want to predict, variables can already excluded from the train data :  
+- `X` : corresponding to the row id  
+- `user_name` : data's owner  
+- `cvtd_timestamp`, `raw_timestamp_part_1`, `raw_timestamp_part_2`: timestamp variables as we want to predict the classes based on the type of move not the dates.
+
+```{r}
+trainingDf <- trainingDf[, !(colnames(trainingDf) %in% c("X","user_name", "cvtd_timestamp","raw_timestamp_part_1","raw_timestamp_part_2"))]
+```
+
+Lot's of variable have a subsentional amount of NA as values, those variables cannot be used in the prediction, all the variables which have more than 50% of NAs value will be automatically excluded from the dataset :  
+```{r}
+trainingDf <- trainingDf[, colSums(is.na(trainingDf)) < 0.5*nrow(trainingDf)]
+```
+
+Remove variable with no variability:
+```{r}
+nsv <- nearZeroVar(trainingDf, saveMetrics = TRUE)
+trainingDf <- trainingDf[,!nsv$nzv]
+```
+
+# Building model
+
+We will first anylize if multiple variables are highly correlated. If this is the case, we will do
+ in the preprocessing step a principal components analysis (PCA), to reduce the number of predictors.  
+ 
+```{r}
+names(trainingDf)[findCorrelation(cor(trainingDf[-54]), cutoff = 0.80)]
+```
+
+As we can see, in the above results some variables are highly correlated which mean that we will use 
+PCA in the preprocessing step.  
+
+Also as stated in the introduction, the training sample needs to use cross validation, we will use the K-Fold Cross Validation with a `K = 7`. Using this method, we won't need to split the data into a train and a test dataset (as this is usual done with the Data Split methodology). The test set representing the test fold is already evaluated when the model is beeing trained. We can directly pick the model results to evaluate the model.  
+
+```{r}
+tc <- trainControl( method="cv", number=7, repeats=1, verboseIter=FALSE, preProcOptions="pca", allowParallel=TRUE)
+```
+
+The algorithm used for modeling are :  
+ - Random Forest (rf)  
+ - Generalized Boosted Regression (gbm)  
+ - Support Vector Machines Linear (svmLinear)  
+ - Support Vector Machines Radial (svmRadial)  
+ - Neural Net (nnet)  
+ 
+```{r cache=TRUE}
+rfMod <- train(classe ~ ., data = trainingDf, method = "rf", trControl= tc, verbose=FALSE)
+gbmMod <- train(classe ~ ., data = trainingDf, method = "gbm", trControl= tc, verbose=FALSE)
+svmLinearMod <- train(classe ~ ., data = trainingDf, method = "svmLinear", trControl= tc, verbose=FALSE)
+svmRadialMod <- train(classe ~ ., data = trainingDf, method = "svmRadial", trControl= tc, verbose=FALSE)
+nnetMod <- train(classe ~ ., data = trainingDf, method = "nnet", trControl= tc, verbose=FALSE)
+```
+
+Now let's calculate the accuracy of the different models:
+```{r}
+method <- c(rfMod$method, gbmMod$method, rpartMod$method, svmLinearMod$method, svmRadialMod$method, nnetMod$method)
+accuracy <- c(max(rfMod$results$Accuracy), max(gbmMod$results$Accuracy), max(rpartMod$results$Accuracy), max(svmLinearMod$results$Accuracy), max(svmRadialMod$results$Accuracy), max(nnetMod$results$Accuracy))
+sample_error <- 1-accuracy
+
+model_results <- cbind(method, accuracy, sample_error)
+knitr::kable(model_results)
+```
+
+# Building model
+
+As we can in the table above, the most accurate model is the Random Forest (rf) with an accuracy of `r max(rfMod$results$Accuracy)`. Since the accuracy is already quiet good, we can estimate that it's not necessary to try to combine the models to get a better model.
