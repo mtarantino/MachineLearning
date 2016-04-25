@@ -227,17 +227,13 @@ knitr::kable(modelResults[order(-accuracy),] )</code></pre>
 <div id="test-sample" class="section level1">
 <h1>Test sample</h1>
 <p>The random forest model beeing the best fit, we can use this one to predict the value of our test data set.</p>
-<pre class="r"><code>predTest &lt;- predict(rfMod, testingDf)</code></pre>
-<p>Let’s generate the prediction file to submit</p>
-<pre class="r"><code>pml_write_files = function(x){
-  n = length(x)
-  for(i in 1:n){
-    filename = paste0(&quot;problem_id_&quot;,i,&quot;.txt&quot;)
-    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
-  }
-}
+<pre class="r"><code>predTest &lt;- predict(rfMod, testingDf)
+predTest</code></pre>
+<pre><code>[1] B A B A A E D B A A B C B A E E A B B B
+Levels: A B C D E
+</code></pre>
 
-pml_write_files(predTest)</code></pre>
+
 </div>
 <div id="conclusion" class="section level1">
 <h1>Conclusion</h1>
